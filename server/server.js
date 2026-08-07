@@ -5,6 +5,7 @@ import { fileURLToPath } from 'url';
 import { Server } from 'socket.io';
 import cors from 'cors';
 import os from 'os';
+import { getBoardMode } from '../gameConfig.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -23,17 +24,23 @@ const io = new Server(server, {
 
 const rooms = new Map();
 
-const PAIR_COUNTS = { easy: 8, medium: 18, hard: 32 };
-
 const EMOJIS = [
   '🐶', '🐱', '🐭', '🐹', '🐰', '🦊', '🐻', '🐼', '🐨', '🐯',
   '🦁', '🐮', '🐷', '🐸', '🐵', '🐔', '🦄', '🐝', '🦋', '🐢',
   '🐙', '🦀', '🐠', '🐬', '🦈', '🍎', '🍌', '🍇', '🍓', '🍒',
-  '🌸', '🌻',
+  '🌸', '🌻', '⚽', '🎸', '🎮', '🚗', '✈️', '🌙',
 ];
 
 function generateRoomId() {
-  return Math.random().toString(36).substring(2, 8).toUpperCase();
+  let roomId = '';
+  do {
+    roomId = String(Math.floor(100000 + Math.random() * 900000));
+  } while (rooms.has(roomId));
+  return roomId;
+}
+
+function normalizeRoomId(raw) {
+  return String(raw || '').replace(/\D/g, '');
 }
 
 function shuffle(array) {
@@ -46,9 +53,44 @@ function shuffle(array) {
 }
 
 function generateCardOrder(difficulty) {
-  const pairCount = PAIR_COUNTS[difficulty] || PAIR_COUNTS.medium;
-  const pairs = EMOJIS.slice(0, pairCount);
-  return shuffle([...pairs, ...pairs]);
+  const { pairs } = getBoardMode(difficulty);
+  const deck = EMOJIS.slice(0, pairs);
+  return shuffle([...deck, ...deck]);
+}
+
+function resetRoomForNewGame(room) {
+  room.gameState.cardOrder = generateCardOrder(room.difficulty);
+  room.gameState.flippedCards = [];
+  room.gameState.matchedCards = [];
+  room.gameState.currentPlayer = 1;
+  room.gameState.processing = false;
+  room.gameState.started = true;
+
+  Object.values(room.players).forEach((player) => {
+    player.score = 0;
+    player.attempts = 0;
+    player.matchedPairs = 0;
+  });
+}
+
+function buildGameStartPayload(room) {
+  const board = getBoardMode(room.difficulty);
+  const playerNumbers = {};
+  Object.entries(room.players).forEach(([id, player]) => {
+    playerNumbers[id] = player.number;
+  });
+
+  return {
+    roomId: room.id,
+    difficulty: room.difficulty,
+    cards: buildCards(room),
+    playerNumbers,
+    players: getPlayersPayload(room),
+    currentPlayer: room.gameState.currentPlayer,
+    totalPairs: board.pairs,
+    gridCols: board.cols,
+    gridRows: board.rows,
+  };
 }
 
 function buildCards(room) {
@@ -103,6 +145,7 @@ io.on('connection', (socket) => {
     const cardOrder = generateCardOrder(difficulty);
 
     rooms.set(roomId, {
+      id: roomId,
       players: {
         [socket.id]: {
           name: playerName || 'Player 1',
@@ -135,7 +178,7 @@ io.on('connection', (socket) => {
   });
 
   socket.on('joinRoom', ({ roomId, difficulty, playerName }) => {
-    const normalizedRoomId = roomId.trim().toUpperCase();
+    const normalizedRoomId = normalizeRoomId(roomId);
     const room = rooms.get(normalizedRoomId);
 
     if (!room) {
@@ -175,39 +218,43 @@ io.on('connection', (socket) => {
       playerNumbers[id] = player.number;
     });
 
-    io.to(normalizedRoomId).emit('gameStart', {
-      roomId: normalizedRoomId,
-      difficulty: room.difficulty,
-      cards: buildCards(room),
-      playerNumbers,
-      players: getPlayersPayload(room),
-      currentPlayer: room.gameState.currentPlayer,
-      totalPairs: room.gameState.cardOrder.length / 2,
-    });
+    io.to(normalizedRoomId).emit('gameStart', buildGameStartPayload(room));
+  });
+
+  socket.on('playAgain', ({ roomId }) => {
+    const normalizedRoomId = normalizeRoomId(roomId);
+    const room = rooms.get(normalizedRoomId);
+
+    if (!room) {
+      socket.emit('error', 'Room not found');
+      return;
+    }
+
+    if (!room.players[socket.id]) {
+      socket.emit('error', 'You are not in this room');
+      return;
+    }
+
+    if (Object.keys(room.players).length < 2) {
+      socket.emit('error', 'Both players must be connected to play again');
+      return;
+    }
+
+    resetRoomForNewGame(room);
+    io.to(normalizedRoomId).emit('gameStart', buildGameStartPayload(room));
   });
 
   socket.on('requestGameState', ({ roomId }) => {
-    const room = rooms.get(roomId);
+    const normalizedRoomId = normalizeRoomId(roomId);
+    const room = rooms.get(normalizedRoomId);
     if (!room || !room.gameState.started) return;
 
-    const playerNumbers = {};
-    Object.entries(room.players).forEach(([id, player]) => {
-      playerNumbers[id] = player.number;
-    });
-
-    socket.emit('gameStart', {
-      roomId,
-      difficulty: room.difficulty,
-      cards: buildCards(room),
-      playerNumbers,
-      players: getPlayersPayload(room),
-      currentPlayer: room.gameState.currentPlayer,
-      totalPairs: room.gameState.cardOrder.length / 2,
-    });
+    socket.emit('gameStart', buildGameStartPayload(room));
   });
 
   socket.on('cardFlip', ({ roomId, cardIndex, playerNumber }) => {
-    const room = rooms.get(roomId);
+    const normalizedRoomId = normalizeRoomId(roomId);
+    const room = rooms.get(normalizedRoomId);
     if (!room || !room.gameState.started) return;
 
     const player = room.players[socket.id];
@@ -220,7 +267,7 @@ io.on('connection', (socket) => {
 
     room.gameState.flippedCards.push(cardIndex);
 
-    io.to(roomId).emit('cardFlipped', {
+    io.to(normalizedRoomId).emit('cardFlipped', {
       cardIndex,
       playerNumber,
     });
@@ -239,29 +286,29 @@ io.on('connection', (socket) => {
         room.gameState.flippedCards = [];
         room.gameState.processing = false;
 
-        io.to(roomId).emit('cardsMatched', {
+        io.to(normalizedRoomId).emit('cardsMatched', {
           cardIndices: [first, second],
           playerNumber,
           players: getPlayersPayload(room),
           totalMatchedPairs: room.gameState.matchedCards.length / 2,
         });
 
-        emitTurnChanged(roomId, room);
-        checkGameComplete(roomId, room);
+        emitTurnChanged(normalizedRoomId, room);
+        checkGameComplete(normalizedRoomId, room);
       } else {
         setTimeout(() => {
-          const activeRoom = rooms.get(roomId);
+          const activeRoom = rooms.get(normalizedRoomId);
           if (!activeRoom) return;
 
           activeRoom.gameState.flippedCards = [];
           activeRoom.gameState.processing = false;
           activeRoom.gameState.currentPlayer = playerNumber === 1 ? 2 : 1;
 
-          io.to(roomId).emit('cardsReset', {
+          io.to(normalizedRoomId).emit('cardsReset', {
             cardIndices: [first, second],
           });
 
-          emitTurnChanged(roomId, activeRoom);
+          emitTurnChanged(normalizedRoomId, activeRoom);
         }, 1000);
       }
     }

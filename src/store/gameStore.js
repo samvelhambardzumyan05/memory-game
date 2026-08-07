@@ -1,10 +1,12 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
+import { getBoardMode } from './gameConfig.js';
+
 const useGameStore = create(
   persist(
     (set, get) => ({
-      difficulty: 'medium',
+      difficulty: '6x6',
       gameStarted: false,
       gameCompleted: false,
       currentPlayer: 1,
@@ -36,16 +38,14 @@ const useGameStore = create(
 
       setPlayerNumber: (number) => set({ playerNumber: number }),
       setDifficulty: (newDifficulty) => {
-        const totalPairs = newDifficulty === 'easy' ? 8 :
-                         newDifficulty === 'hard' ? 32 :
-                         18;
+        const { pairs } = getBoardMode(newDifficulty);
         set({
           difficulty: newDifficulty,
-          stats: { 
+          stats: {
             ...get().stats,
-            totalPairs,
-            matchedPairs: 0
-          }
+            totalPairs: pairs,
+            matchedPairs: 0,
+          },
         });
       },
       setPlayerNames: (player1Name, player2Name) => set({
@@ -150,7 +150,37 @@ const useGameStore = create(
             matchedPairs: 0,
             totalPairs: state.stats.totalPairs,
           },
-          timer: null
+          timer: null,
+        });
+      },
+      prepareRematch: (startingPlayer = 1) => {
+        if (get().timer) clearInterval(get().timer);
+        set({
+          gameStarted: true,
+          gameCompleted: false,
+          currentPlayer: startingPlayer,
+          players: {
+            1: { ...get().players[1], score: 0, time: 0, attempts: 0 },
+            2: { ...get().players[2], score: 0, time: 0, attempts: 0 },
+          },
+          stats: {
+            ...get().stats,
+            startTime: Date.now(),
+            endTime: null,
+            attempts: 0,
+            matchedPairs: 0,
+          },
+          timer: setInterval(() => {
+            set((state) => ({
+              players: {
+                ...state.players,
+                [state.currentPlayer]: {
+                  ...state.players[state.currentPlayer],
+                  time: state.players[state.currentPlayer].time + 1,
+                },
+              },
+            }));
+          }, 1000),
         });
       },
     }),

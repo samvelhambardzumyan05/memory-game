@@ -1,18 +1,27 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 
-export function useBoardDimensions(gridCols, isActive) {
-  const [size, setSize] = useState(0);
+export function useBoardDimensions(gridCols, gridRows, isActive) {
+  const [dimensions, setDimensions] = useState({ width: 0, height: 0, cellSize: 0 });
   const observerRef = useRef(null);
   const elementRef = useRef(null);
 
   const updateSize = useCallback(() => {
     const element = elementRef.current;
-    if (!element) return;
+    if (!element || !gridCols || !gridRows) return;
 
     const { width, height } = element.getBoundingClientRect();
-    const nextSize = Math.floor(Math.min(width, height));
-    setSize(nextSize > 0 ? nextSize : 0);
-  }, []);
+    const cellFromWidth = width / gridCols;
+    const cellFromHeight = height / gridRows;
+    const cellSize = Math.floor(Math.min(cellFromWidth, cellFromHeight));
+
+    if (cellSize <= 0) return;
+
+    setDimensions({
+      width: cellSize * gridCols,
+      height: cellSize * gridRows,
+      cellSize,
+    });
+  }, [gridCols, gridRows]);
 
   const containerRef = useCallback((node) => {
     if (observerRef.current) {
@@ -23,7 +32,7 @@ export function useBoardDimensions(gridCols, isActive) {
     elementRef.current = node;
 
     if (!node || !isActive) {
-      setSize(0);
+      setDimensions({ width: 0, height: 0, cellSize: 0 });
       return;
     }
 
@@ -37,7 +46,7 @@ export function useBoardDimensions(gridCols, isActive) {
 
   useEffect(() => {
     if (!isActive) {
-      setSize(0);
+      setDimensions({ width: 0, height: 0, cellSize: 0 });
       return undefined;
     }
 
@@ -49,13 +58,9 @@ export function useBoardDimensions(gridCols, isActive) {
       window.removeEventListener('resize', updateSize);
       window.removeEventListener('orientationchange', updateSize);
     };
-  }, [isActive, gridCols, updateSize]);
+  }, [isActive, gridCols, gridRows, updateSize]);
 
-  useEffect(() => {
-    return () => {
-      observerRef.current?.disconnect();
-    };
-  }, []);
+  useEffect(() => () => observerRef.current?.disconnect(), []);
 
-  return { containerRef, size };
+  return { containerRef, dimensions };
 }
