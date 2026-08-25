@@ -248,9 +248,10 @@ body {
 
 .board-grid {
   --grid-cols: 4;
+  --grid-rows: 4;
   display: grid;
   grid-template-columns: repeat(var(--grid-cols), 1fr);
-  grid-template-rows: repeat(var(--grid-cols), 1fr);
+  grid-template-rows: repeat(var(--grid-rows), 1fr);
   gap: max(2px, calc(var(--cell-size, 40px) * 0.08));
   flex-shrink: 0;
 }

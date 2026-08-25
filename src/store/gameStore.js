@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
-import { getBoardMode } from './gameConfig.js';
+import { getBoardMode } from '../gameConfig.js';
 
 const useGameStore = create(
   persist(
@@ -151,36 +151,6 @@ const useGameStore = create(
             totalPairs: state.stats.totalPairs,
           },
           timer: null,
-        });
-      },
-      prepareRematch: (startingPlayer = 1) => {
-        if (get().timer) clearInterval(get().timer);
-        set({
-          gameStarted: true,
-          gameCompleted: false,
-          currentPlayer: startingPlayer,
-          players: {
-            1: { ...get().players[1], score: 0, time: 0, attempts: 0 },
-            2: { ...get().players[2], score: 0, time: 0, attempts: 0 },
-          },
-          stats: {
-            ...get().stats,
-            startTime: Date.now(),
-            endTime: null,
-            attempts: 0,
-            matchedPairs: 0,
-          },
-          timer: setInterval(() => {
-            set((state) => ({
-              players: {
-                ...state.players,
-                [state.currentPlayer]: {
-                  ...state.players[state.currentPlayer],
-                  time: state.players[state.currentPlayer].time + 1,
-                },
-              },
-            }));
-          }, 1000),
         });
       },
     }),

@@ -4,6 +4,13 @@ import useGameStore from './store/gameStore';
 import { playCardFlipSound, playCardMatchSound } from './sounds';
 import socket, { SOCKET_URL } from './socket';
 import { useBoardDimensions } from './hooks/useBoardDimensions';
+import { getBoardMode } from './gameConfig.js';
+
+function formatRoomCode(code) {
+  const digits = String(code || '').replace(/\D/g, '');
+  if (digits.length <= 3) return digits;
+  return `${digits.slice(0, 3)} ${digits.slice(3)}`;
+}
 
 function GameBoard({
   onGameComplete,
@@ -23,7 +30,18 @@ function GameBoard({
   });
   const [error, setError] = useState(null);
 
-  const { currentPlayer, syncFromServer, switchPlayer } = useGameStore();
+  const { difficulty, currentPlayer, syncFromServer, switchPlayer } = useGameStore();
+
+  const boardMode = useMemo(() => {
+    if (gamePayload?.gridCols && gamePayload?.gridRows) {
+      return {
+        cols: gamePayload.gridCols,
+        rows: gamePayload.gridRows,
+      };
+    }
+    const mode = getBoardMode(gamePayload?.difficulty || difficulty);
+    return { cols: mode.cols, rows: mode.rows };
+  }, [gamePayload, difficulty]);
 
   const initializeGame = useCallback((serverCards, serverState = {}) => {
     setCards(serverCards);
@@ -182,20 +200,23 @@ function GameBoard({
     socket.emit('cardFlip', { roomId, cardIndex, playerNumber });
   };
 
-  const gridColumns = Math.sqrt(totalPairs * 2);
+  const { cols: gridCols, rows: gridRows } = boardMode;
   const isBoardActive = gameStatus === 'playing';
-  const { containerRef, size } = useBoardDimensions(gridColumns, isBoardActive);
+  const { containerRef, dimensions } = useBoardDimensions(gridCols, gridRows, isBoardActive);
 
   const boardStyle = useMemo(() => {
-    const boardSize = size || 280;
-    const cellSize = boardSize / gridColumns;
+    const width = dimensions.width || gridCols * 40;
+    const height = dimensions.height || gridRows * 40;
+    const cellSize = dimensions.cellSize || 40;
+
     return {
-      width: `${boardSize}px`,
-      height: `${boardSize}px`,
-      '--grid-cols': gridColumns,
+      width: `${width}px`,
+      height: `${height}px`,
+      '--grid-cols': gridCols,
+      '--grid-rows': gridRows,
       '--cell-size': `${cellSize}px`,
     };
-  }, [size, gridColumns]);
+  }, [dimensions, gridCols, gridRows]);
 
   if (error) {
     return (
@@ -227,7 +248,7 @@ function GameBoard({
         <div className="waiting-screen">
           <h2>Waiting for Player 2</h2>
           <p>Share this Room ID with your friend:</p>
-          <p className="room-code">{roomId}</p>
+          <p className="room-code">{formatRoomCode(roomId)}</p>
           <p>You are Player {playerNumber}</p>
           <p className="join-help">
             Open the same site on another device or browser window and join with this code.

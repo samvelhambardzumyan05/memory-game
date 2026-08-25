@@ -1,12 +1,10 @@
+import { getModeOptions } from './gameConfig.js';
+
 function DifficultySelector({ difficulty, onChange, disabled }) {
-  const difficulties = [
-    { id: 'easy', label: 'Easy (4×4)' },
-    { id: 'medium', label: 'Medium (6×6)' },
-    { id: 'hard', label: 'Hard (8×8)' },
-  ];
+  const difficulties = getModeOptions();
 
   const handleChange = (newDiff) => {
-    if (!disabled || window.confirm("Changing difficulty will reset your progress. Continue?")) {
+    if (!disabled || window.confirm('Changing difficulty will reset your progress. Continue?')) {
       onChange(newDiff);
     }
   };
@@ -16,6 +14,7 @@ function DifficultySelector({ difficulty, onChange, disabled }) {
       {difficulties.map((diff) => (
         <button
           key={diff.id}
+          type="button"
           className={`difficulty-btn ${difficulty === diff.id ? 'active' : ''}`}
           onClick={() => handleChange(diff.id)}
           disabled={disabled}

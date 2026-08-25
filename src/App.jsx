@@ -25,6 +25,7 @@ function applyGameStartData(data, {
   syncFromServer,
   startGame,
   setGameKey,
+  setShowConfetti,
 }) {
   const playerNum = data.playerNumbers[socket.id];
   if (!playerNum) return;
@@ -34,6 +35,7 @@ function applyGameStartData(data, {
   setGamePayload(data);
   setPlayerNumber(playerNum);
   setDifficulty(data.difficulty);
+  setShowConfetti?.(false);
 
   if (data.players) {
     setPlayerNames(
@@ -47,7 +49,7 @@ function applyGameStartData(data, {
     });
   }
 
-  startGame(playerNum, { startTimer: true });
+  startGame(data.currentPlayer ?? playerNum, { startTimer: true });
   setGameKey((prev) => prev + 1);
 }
 
@@ -64,7 +66,6 @@ function App() {
     setPlayerNames,
     syncFromServer,
     startGame,
-    resetGame,
     completeGame,
     timer,
   } = useGameStore();
@@ -126,6 +127,7 @@ function App() {
         syncFromServer,
         startGame,
         setGameKey,
+        setShowConfetti,
       });
     };
 
@@ -158,6 +160,12 @@ function App() {
       if (timer) clearInterval(timer);
     };
   }, [timer]);
+
+  const handlePlayAgain = useCallback(() => {
+    if (!roomId) return;
+    setShowConfetti(false);
+    socket.emit('playAgain', { roomId });
+  }, [roomId]);
 
   const handleStartGame = useCallback(({
     roomId: nextRoomId,
@@ -291,13 +299,7 @@ function App() {
               <button
                 type="button"
                 className="play-again-button"
-                onClick={() => {
-                  resetGame();
-                  setRoomId(null);
-                  setWaitingForOpponent(false);
-                  setGamePayload(null);
-                  setGameKey((prev) => prev + 1);
-                }}
+                onClick={handlePlayAgain}
               >
                 Play Again
               </button>
