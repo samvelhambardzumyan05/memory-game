@@ -1,5 +1,5 @@
 {
-  "name": "reacthw7",
+  "name": "memory-game",
   "private": true,
   "version": "0.0.0",
   "type": "module",
@@ -34,7 +34,7 @@
     "eslint-plugin-react-refresh": "^0.4.19",
     "globals": "^15.15.0"
   },
-  "description": "This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.",
+  "description": "Real-time two-player memory card game built with React, Socket.io and Express",
   "main": "eslint.config.js",
   "keywords": [],
   "author": "",
